@@ -1,0 +1,1148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1F3864" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CL Dispatch" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <title>Clean Latrine Dispatch</title>
+
+  <style>
+    /* =========================================================
+       THEME TOKENS
+       ========================================================= */
+    :root {
+      --navy:            #1F3864;
+      --bg:              #f4f5f7;
+      --card:            #ffffff;
+      --ink:             #1a1a1a;
+      --ink-soft:        #4a4a4a;
+      --ink-faint:       #808080;
+      --border:          #e2e5ea;
+      --shadow:          0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+
+      /* Status palette (from spec) */
+      --overdue-bg:       #FFC7CE;  --overdue-ink:       #9C0006;
+      --action-bg:        #FFCC99;  --action-ink:        #CC3300;
+      --due-bg:           #FFEB9C;  --due-ink:           #9C6500;
+      --coming-bg:        #E8D5F5;  --coming-ink:        #6B21A8;
+      --pending-bg:       #DAE8FC;  --pending-ink:       #0050A0;
+      --setup-bg:         #FFD7D7;  --setup-ink:         #990000;
+
+      --success:         #16a34a;
+      --success-soft:    #dcfce7;
+      --warn-bg:         #FEF3C7;
+      --warn-ink:        #92400E;
+
+      --tap:             44px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.35;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      min-height: 100vh;
+      padding-bottom: calc(68px + env(safe-area-inset-bottom));
+    }
+    button { font-family: inherit; }
+    a { color: inherit; }
+
+    /* =========================================================
+       HEADER
+       ========================================================= */
+    .app-header {
+      background: var(--navy);
+      color: #fff;
+      padding: calc(env(safe-area-inset-top) + 14px) 16px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 40;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .app-header .titles { display: flex; flex-direction: column; }
+    .app-header h1 {
+      margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .2px;
+    }
+    .app-header .date {
+      margin-top: 2px; font-size: 12px; opacity: .82;
+    }
+    .gear-btn {
+      background: rgba(255,255,255,.12);
+      border: 0; color: #fff;
+      width: var(--tap); height: var(--tap);
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 20px; cursor: pointer;
+    }
+    .gear-btn:active { background: rgba(255,255,255,.24); }
+
+    /* Stale-cache banner */
+    .stale-banner {
+      display: none;
+      background: var(--warn-bg);
+      color: var(--warn-ink);
+      padding: 8px 14px;
+      font-size: 13px;
+      text-align: center;
+      border-bottom: 1px solid #f0dca4;
+    }
+    .stale-banner.show { display: block; }
+
+    /* =========================================================
+       SUMMARY PILL STRIP
+       ========================================================= */
+    .summary-strip {
+      display: flex; gap: 8px; overflow-x: auto;
+      padding: 10px 12px; margin: 0;
+      scrollbar-width: none;
+    }
+    .summary-strip::-webkit-scrollbar { display: none; }
+    .pill {
+      flex: 0 0 auto;
+      font-size: 12px; font-weight: 700; letter-spacing: .3px;
+      padding: 8px 12px; border-radius: 999px;
+      white-space: nowrap; line-height: 1;
+      border: 1px solid rgba(0,0,0,.04);
+    }
+    .pill .n { font-size: 13px; margin-left: 6px; }
+    .pill--OVERDUE       { background: var(--overdue-bg); color: var(--overdue-ink); }
+    .pill--ACTION_NEEDED { background: var(--action-bg);  color: var(--action-ink); }
+    .pill--SERVICE_DUE   { background: var(--due-bg);     color: var(--due-ink); }
+    .pill--COMING_DUE    { background: var(--coming-bg);  color: var(--coming-ink); }
+    .pill--PENDING       { background: var(--pending-bg); color: var(--pending-ink); }
+    .pill--SETUP_NEEDED  { background: var(--setup-bg);   color: var(--setup-ink); }
+    .pill--UNKNOWN       { background: #e5e7eb; color: #374151; }
+
+    /* =========================================================
+       ZONE GROUPS + CARDS
+       ========================================================= */
+    .zone-group { padding: 4px 12px 14px; }
+    .zone-group h2 {
+      margin: 14px 4px 10px;
+      font-size: 14px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .6px;
+      color: var(--ink-soft);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .zone-group h2 .count {
+      background: #e5e7eb; color: #374151;
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto auto;
+      row-gap: 4px;
+      column-gap: 10px;
+      cursor: pointer;
+    }
+    .card:active { transform: scale(.995); }
+    .card .cust {
+      grid-column: 1 / 2;
+      grid-row: 1;
+      font-size: 17px; font-weight: 700; color: var(--ink);
+      line-height: 1.25;
+    }
+    .card .addr {
+      grid-column: 1 / 2;
+      grid-row: 2;
+      font-size: 13px; color: var(--ink-soft);
+    }
+    .card .status-pill {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      font-size: 11px; font-weight: 800; letter-spacing: .4px;
+      padding: 5px 10px; border-radius: 999px;
+      white-space: nowrap;
+    }
+    .card .action-tag {
+      grid-column: 1 / 2;
+      grid-row: 3;
+      justify-self: start;
+      font-size: 11px; font-weight: 700;
+      background: #f1f5f9; color: #0f172a;
+      padding: 3px 8px; border-radius: 6px;
+      margin-top: 2px;
+    }
+    .card .next {
+      grid-column: 2;
+      grid-row: 3;
+      align-self: end;
+      font-size: 12px; color: var(--ink-faint);
+      text-align: right;
+    }
+
+    /* Status card tints */
+    .status-OVERDUE       { background: var(--overdue-bg); }
+    .status-OVERDUE       .cust,
+    .status-OVERDUE       .addr { color: var(--overdue-ink); }
+    .status-ACTION_NEEDED { background: var(--action-bg); }
+    .status-ACTION_NEEDED .cust,
+    .status-ACTION_NEEDED .addr { color: var(--action-ink); }
+    .status-SERVICE_DUE   { background: var(--due-bg); }
+    .status-SERVICE_DUE   .cust,
+    .status-SERVICE_DUE   .addr { color: var(--due-ink); }
+    .status-COMING_DUE    { background: var(--coming-bg); }
+    .status-COMING_DUE    .cust,
+    .status-COMING_DUE    .addr { color: var(--coming-ink); }
+    .status-PENDING       { background: var(--pending-bg); }
+    .status-PENDING       .cust,
+    .status-PENDING       .addr { color: var(--pending-ink); }
+    .status-SETUP_NEEDED  { background: var(--setup-bg); }
+    .status-SETUP_NEEDED  .cust,
+    .status-SETUP_NEEDED  .addr { color: var(--setup-ink); }
+    .status-UNKNOWN       { background: #ffffff; }
+
+    .status-pill.pill-OVERDUE       { background: var(--overdue-ink); color: #fff; }
+    .status-pill.pill-ACTION_NEEDED { background: var(--action-ink);  color: #fff; }
+    .status-pill.pill-SERVICE_DUE   { background: var(--due-ink);     color: #fff; }
+    .status-pill.pill-COMING_DUE    { background: var(--coming-ink);  color: #fff; }
+    .status-pill.pill-PENDING       { background: var(--pending-ink); color: #fff; }
+    .status-pill.pill-SETUP_NEEDED  { background: var(--setup-ink);   color: #fff; }
+    .status-pill.pill-UNKNOWN       { background: #6b7280;             color: #fff; }
+
+    /* Serviced state on the board */
+    .card.serviced {
+      opacity: .55;
+      order: 999; /* flex ordering not used here, but keeps intent */
+    }
+    .card.serviced::after {
+      content: "✓";
+      position: absolute; top: 10px; right: 10px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--success); color: #fff;
+      display: grid; place-items: center;
+      font-weight: 800;
+      box-shadow: 0 0 0 3px #fff;
+    }
+
+    /* Empty state */
+    .empty {
+      padding: 60px 24px; text-align: center; color: var(--ink-soft);
+    }
+    .empty h3 { margin: 0 0 8px; color: var(--ink); }
+    .empty p  { margin: 0; font-size: 14px; }
+
+    /* =========================================================
+       FLOATING REFRESH BUTTON
+       ========================================================= */
+    .fab {
+      position: fixed;
+      right: 16px;
+      bottom: calc(76px + env(safe-area-inset-bottom));
+      width: 54px; height: 54px; border-radius: 50%;
+      background: var(--navy); color: #fff;
+      border: 0; font-size: 22px;
+      box-shadow: 0 6px 16px rgba(31,56,100,.35);
+      cursor: pointer; z-index: 30;
+      display: grid; place-items: center;
+    }
+    .fab .icon { display: inline-block; }
+    .fab.loading .icon { animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* =========================================================
+       BOTTOM TAB BAR
+       ========================================================= */
+    .tabbar {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      background: #fff;
+      border-top: 1px solid var(--border);
+      padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+      display: grid; grid-template-columns: 1fr 1fr;
+      z-index: 50;
+    }
+    .tab {
+      background: transparent; border: 0;
+      padding: 8px 6px;
+      min-height: var(--tap);
+      color: var(--ink-faint); font-weight: 600; font-size: 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      cursor: pointer; position: relative;
+    }
+    .tab .tab-ico { font-size: 20px; line-height: 1; }
+    .tab.active { color: var(--navy); }
+    .tab .dot-count {
+      position: absolute; top: 4px; right: calc(50% - 26px);
+      background: var(--overdue-ink); color: #fff;
+      font-size: 10px; font-weight: 800;
+      min-width: 18px; height: 18px; padding: 0 5px;
+      border-radius: 999px; display: none;
+      align-items: center; justify-content: center;
+    }
+    .tab .dot-count.show { display: inline-flex; }
+
+    /* =========================================================
+       VIEWS
+       ========================================================= */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* =========================================================
+       DETAIL / SETTINGS SLIDE-IN
+       ========================================================= */
+    .sheet {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      transform: translateX(100%);
+      transition: transform .25s ease;
+      z-index: 60;
+      overflow-y: auto;
+      padding-bottom: 40px;
+    }
+    .sheet.open { transform: translateX(0); }
+    .sheet-header {
+      background: var(--navy); color: #fff;
+      padding: calc(env(safe-area-inset-top) + 14px) 14px 14px;
+      display: flex; align-items: center; gap: 10px;
+      position: sticky; top: 0;
+    }
+    .back-btn {
+      background: rgba(255,255,255,.14); border: 0; color: #fff;
+      width: var(--tap); height: var(--tap); border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 20px; cursor: pointer;
+    }
+    .back-btn:active { background: rgba(255,255,255,.28); }
+    .sheet-header h2 { margin: 0; font-size: 17px; font-weight: 700; }
+
+    .detail-status {
+      display: inline-block; align-self: flex-start;
+      padding: 6px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 800; letter-spacing: .4px;
+      margin: 14px 14px 6px;
+    }
+    .detail-card {
+      background: #fff; margin: 12px 14px;
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 10px 14px;
+    }
+    .detail-row {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-row:last-child { border-bottom: 0; }
+    .detail-row .k {
+      font-size: 12px; color: var(--ink-faint);
+      text-transform: uppercase; letter-spacing: .5px;
+      flex: 0 0 120px;
+    }
+    .detail-row .v { font-size: 15px; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+
+    .actions {
+      display: grid; gap: 10px;
+      padding: 6px 14px 20px;
+    }
+    .btn {
+      min-height: 56px;
+      border: 0; border-radius: 14px;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-call     { background: #dcfce7; color: #065f46; }
+    .btn-call:disabled {
+      background: #e5e7eb; color: #9ca3af; cursor: not-allowed;
+    }
+    .btn-nav      { background: #dbeafe; color: #1e3a8a; }
+    .btn-complete { background: #fff7cc; color: #78350f; }
+    .btn-complete.done {
+      background: #dcfce7; color: #065f46;
+    }
+
+    /* Settings */
+    .settings-body { padding: 16px 14px 24px; }
+    .settings-body label {
+      display: block; font-size: 13px; font-weight: 700; color: var(--ink-soft);
+      margin: 10px 0 6px;
+    }
+    .settings-body input[type="url"],
+    .settings-body input[type="text"] {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      font-size: 15px; background: #fff;
+      outline: none;
+    }
+    .settings-body input:focus { border-color: var(--navy); }
+    .settings-body .current-url {
+      margin-top: 6px; font-size: 12px; color: var(--ink-faint);
+      word-break: break-all;
+    }
+    .settings-body p.help {
+      font-size: 13px; color: var(--ink-soft); line-height: 1.5;
+      background: #fff; padding: 12px 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      margin: 14px 0 18px;
+    }
+    .settings-body .btn-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-top: 14px;
+    }
+    .btn-primary { background: var(--navy); color: #fff; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+
+    /* =========================================================
+       COMPLETED TODAY VIEW
+       ========================================================= */
+    .done-wrap { padding: 14px; }
+    .done-actions {
+      display: flex; gap: 10px; margin-bottom: 12px;
+    }
+    .done-actions .btn {
+      flex: 1; min-height: 48px; font-size: 14px;
+    }
+    .done-item {
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+      display: grid; grid-template-columns: 1fr auto;
+      row-gap: 4px;
+    }
+    .done-item .cust { font-weight: 700; font-size: 15px; }
+    .done-item .addr { font-size: 13px; color: var(--ink-soft); grid-column: 1 / 3; }
+    .done-item .time { font-size: 12px; color: var(--ink-faint); }
+    .done-summary {
+      background: #fff; padding: 10px 14px; border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 13px; color: var(--ink-soft);
+      margin-bottom: 10px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; left: 50%; bottom: 90px;
+      transform: translateX(-50%) translateY(20px);
+      background: #111827; color: #fff;
+      font-size: 14px; font-weight: 600;
+      padding: 10px 16px; border-radius: 999px;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Pull-to-refresh indicator */
+    .ptr {
+      text-align: center;
+      font-size: 13px; color: var(--ink-faint);
+      padding: 4px 0 0;
+      height: 0; overflow: hidden;
+      transition: height .15s ease;
+    }
+    .ptr.show { height: 28px; }
+
+    @media (min-width: 640px) {
+      body { max-width: 520px; margin: 0 auto; box-shadow: 0 0 0 1px var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <!-- ======= Header ======= -->
+  <header class="app-header">
+    <div class="titles">
+      <h1>Clean Latrine Dispatch</h1>
+      <div class="date" id="todayDate"></div>
+    </div>
+    <button class="gear-btn" id="openSettings" aria-label="Settings">⚙️</button>
+  </header>
+
+  <div class="stale-banner" id="staleBanner">Showing cached data — offline or fetch failed.</div>
+
+  <!-- ======= View: Route (Dispatch Board) ======= -->
+  <section class="view active" id="view-route">
+    <div class="ptr" id="ptr">Release to refresh…</div>
+    <div class="summary-strip" id="summaryStrip"></div>
+    <div id="zonesContainer"></div>
+    <button class="fab" id="refreshBtn" aria-label="Refresh">
+      <span class="icon">↻</span>
+    </button>
+  </section>
+
+  <!-- ======= View: Done Today ======= -->
+  <section class="view" id="view-done">
+    <div class="done-wrap">
+      <div class="done-summary" id="doneSummary">No units marked serviced yet.</div>
+      <div class="done-actions">
+        <button class="btn btn-primary" id="copySummaryBtn">📋 Copy Summary</button>
+        <button class="btn btn-secondary" id="clearDoneBtn">Clear List</button>
+      </div>
+      <div id="doneList"></div>
+    </div>
+  </section>
+
+  <!-- ======= Tab Bar ======= -->
+  <nav class="tabbar" role="tablist">
+    <button class="tab active" data-tab="route" role="tab" aria-selected="true">
+      <span class="tab-ico">🗺️</span>
+      <span>Route</span>
+    </button>
+    <button class="tab" data-tab="done" role="tab" aria-selected="false">
+      <span class="tab-ico">✅</span>
+      <span>Done Today <span class="dot-count" id="doneCount">0</span></span>
+    </button>
+  </nav>
+
+  <!-- ======= Detail Sheet ======= -->
+  <div class="sheet" id="detailSheet" aria-hidden="true">
+    <div class="sheet-header">
+      <button class="back-btn" id="closeDetail" aria-label="Back">←</button>
+      <h2>Unit Details</h2>
+    </div>
+    <span class="detail-status" id="detailStatus">—</span>
+    <div class="detail-card" id="detailFields"></div>
+    <div class="actions">
+      <button class="btn btn-call"     id="btnCall">📞 Call</button>
+      <button class="btn btn-nav"      id="btnNavigate">📍 Navigate</button>
+      <button class="btn btn-complete" id="btnComplete">✓ Mark Serviced</button>
+    </div>
+  </div>
+
+  <!-- ======= Settings Sheet ======= -->
+  <div class="sheet" id="settingsSheet" aria-hidden="true">
+    <div class="sheet-header">
+      <button class="back-btn" id="closeSettings" aria-label="Back">←</button>
+      <h2>Settings</h2>
+    </div>
+    <div class="settings-body">
+      <label for="csvUrlInput">Google Sheets CSV URL</label>
+      <input type="url" id="csvUrlInput" inputmode="url" autocomplete="off"
+             placeholder="https://docs.google.com/spreadsheets/d/…/gviz/tq?tqx=out:csv&sheet=Work%20To%20Be%20Done" />
+      <div class="current-url" id="currentUrl"></div>
+
+      <p class="help">
+        Paste your published Google Sheets CSV URL here. Go to
+        <strong>File → Share → Publish to web</strong> → select the
+        <strong>“Work To Be Done”</strong> sheet → publish as
+        <strong>CSV</strong> → copy the link.
+      </p>
+
+      <div class="btn-row">
+        <button class="btn btn-primary"   id="saveUrlBtn">Save &amp; Reload</button>
+        <button class="btn btn-secondary" id="resetUrlBtn">Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied!</div>
+
+  <script>
+  /* =========================================================
+     Clean Latrine Dispatch — app logic (vanilla JS, no build)
+     =========================================================
+     The app reads a published Google Sheets CSV that exposes the
+     "Work To Be Done" sheet. Columns are in this exact order:
+
+       0 Filter    (ignored)
+       1 Zone
+       2 Customer
+       3 Contact Name
+       4 Contact Number
+       5 Address / Jobsite
+       6 Next Service        (MM/DD/YYYY)
+       7 Status              (OVERDUE, ACTION NEEDED, SERVICE DUE,
+                              COMING DUE, PENDING, SETUP NEEDED, …)
+       8 Service Action
+       9 Action Date
+      10 Notes
+
+     --- HOW TO CHANGE THE CSV URL ---
+     Users normally change it via the in-app Settings screen
+     (gear icon). If you prefer to HARDCODE the URL instead of
+     relying on Settings, edit DEFAULT_CSV_URL below.
+     ========================================================= */
+
+  // 🔧  Edit this line to hardcode your sheet URL if you prefer.
+  const DEFAULT_CSV_URL =
+    'https://docs.google.com/spreadsheets/d/SHEET_ID/gviz/tq?tqx=out:csv&sheet=Work%20To%20Be%20Done';
+
+  const LS_URL_KEY     = 'cleanLatrine_csvUrl';
+  const LS_CACHE_KEY   = 'cleanLatrine_csvCache';
+  const SS_DONE_KEY    = 'cleanLatrine_doneToday';
+
+  /* ---------- Status helpers ---------- */
+  const STATUS_ORDER = [
+    'OVERDUE',
+    'ACTION NEEDED',
+    'SERVICE DUE',
+    'COMING DUE',
+    'PENDING',
+    'SETUP NEEDED'
+  ];
+  const STATUS_CLASS = {
+    'OVERDUE':        'OVERDUE',
+    'ACTION NEEDED':  'ACTION_NEEDED',
+    'SERVICE DUE':    'SERVICE_DUE',
+    'COMING DUE':     'COMING_DUE',
+    'PENDING':        'PENDING',
+    'SETUP NEEDED':   'SETUP_NEEDED'
+  };
+  function statusKey(raw) {
+    const s = (raw || '').trim().toUpperCase();
+    return STATUS_CLASS[s] || 'UNKNOWN';
+  }
+  function statusRank(raw) {
+    const s = (raw || '').trim().toUpperCase();
+    const i = STATUS_ORDER.indexOf(s);
+    return i === -1 ? 99 : i;
+  }
+
+  /* ---------- CSV parser (RFC-4180-ish, handles quotes) ---------- */
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else {
+        if (c === '"') { inQuotes = true; }
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\r') { /* skip */ }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else { field += c; }
+      }
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  /* ---------- Map a CSV row to a unit object ---------- */
+  function rowToUnit(cols, idx) {
+    const g = (i) => (cols[i] == null ? '' : String(cols[i]).trim());
+    return {
+      _id: idx, // stable id for this session
+      zone:        g(1) || 'Unassigned',
+      customer:    g(2),
+      contactName: g(3),
+      contactNum:  g(4),
+      address:     g(5),
+      nextService: g(6),
+      status:      (g(7) || '').toUpperCase(),
+      serviceAction: g(8),
+      actionDate:  g(9),
+      notes:       g(10)
+    };
+  }
+
+  /* ---------- State ---------- */
+  let units = [];           // all units from latest CSV
+  let doneToday = {};       // { [unitKey]: { ts: ISO, customer, address } }
+  let isUsingCache = false;
+
+  /* A stable per-session key: zone+customer+address+nextService. Uses
+     these fields because the sheet has no unique PP# column by default. */
+  function unitKey(u) {
+    return [u.zone, u.customer, u.address, u.nextService].join('||');
+  }
+
+  /* ---------- DOM refs ---------- */
+  const $ = (sel) => document.querySelector(sel);
+  const summaryStrip = $('#summaryStrip');
+  const zonesContainer = $('#zonesContainer');
+  const refreshBtn = $('#refreshBtn');
+  const detailSheet = $('#detailSheet');
+  const settingsSheet = $('#settingsSheet');
+  const toastEl = $('#toast');
+  const staleBanner = $('#staleBanner');
+  const doneListEl = $('#doneList');
+  const doneSummaryEl = $('#doneSummary');
+  const doneCountEl = $('#doneCount');
+
+  /* ---------- Today ---------- */
+  function todayStr() {
+    const d = new Date();
+    return d.toLocaleDateString(undefined,
+      { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  }
+  function shortDate() {
+    return new Date().toLocaleDateString(undefined,
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function timeStr(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    return d.toLocaleTimeString(undefined,
+      { hour: 'numeric', minute: '2-digit' });
+  }
+  $('#todayDate').textContent = todayStr();
+
+  /* ---------- Toast ---------- */
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('show'), 1500);
+  }
+
+  /* ---------- URL handling ---------- */
+  function getCsvUrl() {
+    return localStorage.getItem(LS_URL_KEY) || DEFAULT_CSV_URL;
+  }
+  function setCsvUrl(url) {
+    if (url) localStorage.setItem(LS_URL_KEY, url);
+    else localStorage.removeItem(LS_URL_KEY);
+  }
+
+  /* ---------- Fetch ---------- */
+  async function fetchCSV({ silent = false } = {}) {
+    const url = getCsvUrl();
+    refreshBtn.classList.add('loading');
+    try {
+      if (!url || url.includes('SHEET_ID')) {
+        // No real URL yet — load from cache if any, else empty state.
+        loadFromCacheOrEmpty();
+        return;
+      }
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      // Persist cache
+      localStorage.setItem(LS_CACHE_KEY, JSON.stringify({
+        ts: Date.now(), text
+      }));
+      isUsingCache = false;
+      applyCsvText(text);
+      if (!silent) toast('Updated');
+    } catch (err) {
+      console.warn('CSV fetch failed:', err);
+      loadFromCacheOrEmpty();
+      if (!silent) toast('Offline — using cache');
+    } finally {
+      refreshBtn.classList.remove('loading');
+      updateStaleBanner();
+    }
+  }
+
+  function loadFromCacheOrEmpty() {
+    const raw = localStorage.getItem(LS_CACHE_KEY);
+    if (raw) {
+      try {
+        const { text } = JSON.parse(raw);
+        isUsingCache = true;
+        applyCsvText(text);
+        return;
+      } catch (e) { /* fall through */ }
+    }
+    // No cache at all
+    units = [];
+    render();
+  }
+
+  function applyCsvText(text) {
+    const rows = parseCSV(text);
+    if (!rows.length) { units = []; render(); return; }
+    // Drop header row (first row). Every subsequent row that has *any*
+    // content is considered actionable (the sheet is pre-filtered).
+    const body = rows.slice(1).filter(r => r.some(c => (c || '').trim() !== ''));
+    units = body.map(rowToUnit);
+    render();
+  }
+
+  function updateStaleBanner() {
+    staleBanner.classList.toggle('show', isUsingCache);
+  }
+
+  /* ---------- Render Dispatch Board ---------- */
+  function render() {
+    renderSummary();
+    renderZones();
+    renderDoneCount();
+  }
+
+  function renderSummary() {
+    const counts = {
+      'OVERDUE': 0, 'ACTION_NEEDED': 0, 'SERVICE_DUE': 0, 'COMING_DUE': 0
+    };
+    units.forEach(u => {
+      const k = statusKey(u.status);
+      if (counts[k] != null) counts[k]++;
+    });
+    summaryStrip.innerHTML = `
+      <span class="pill pill--OVERDUE">🔴 OVERDUE <span class="n">${counts.OVERDUE}</span></span>
+      <span class="pill pill--ACTION_NEEDED">🟠 ACTION NEEDED <span class="n">${counts.ACTION_NEEDED}</span></span>
+      <span class="pill pill--SERVICE_DUE">🟡 SERVICE DUE <span class="n">${counts.SERVICE_DUE}</span></span>
+      <span class="pill pill--COMING_DUE">🟣 COMING DUE <span class="n">${counts.COMING_DUE}</span></span>
+    `;
+  }
+
+  function renderZones() {
+    zonesContainer.innerHTML = '';
+
+    if (!units.length) {
+      zonesContainer.innerHTML = `
+        <div class="empty">
+          <h3>No data available</h3>
+          <p>Check your connection or update the CSV URL in Settings.</p>
+        </div>`;
+      return;
+    }
+
+    // Group by zone
+    const groups = new Map();
+    units.forEach(u => {
+      const z = u.zone || 'Unassigned';
+      if (!groups.has(z)) groups.set(z, []);
+      groups.get(z).push(u);
+    });
+
+    // Sort zones alphabetically, but push "Unassigned" to the end
+    const zones = [...groups.keys()].sort((a, b) => {
+      if (a === 'Unassigned') return 1;
+      if (b === 'Unassigned') return -1;
+      return a.localeCompare(b);
+    });
+
+    zones.forEach(z => {
+      const list = groups.get(z)
+        .slice()
+        .sort((a, b) => statusRank(a.status) - statusRank(b.status));
+
+      // Move serviced cards to the bottom of each zone
+      list.sort((a, b) => {
+        const da = doneToday[unitKey(a)] ? 1 : 0;
+        const db = doneToday[unitKey(b)] ? 1 : 0;
+        return da - db;
+      });
+
+      const wrap = document.createElement('div');
+      wrap.className = 'zone-group';
+      wrap.innerHTML = `
+        <h2>${escapeHtml(z)} <span class="count">${list.length}</span></h2>
+        <div class="zone-cards"></div>`;
+      const cardsEl = wrap.querySelector('.zone-cards');
+      list.forEach(u => cardsEl.appendChild(cardEl(u)));
+      zonesContainer.appendChild(wrap);
+    });
+  }
+
+  function cardEl(u) {
+    const cls = statusKey(u.status);
+    const isDone = !!doneToday[unitKey(u)];
+    const el = document.createElement('div');
+    el.className = `card status-${cls}${isDone ? ' serviced' : ''}`;
+    el.dataset.id = u._id;
+
+    const action = (u.serviceAction || '').trim();
+    const showAction = action && action.toLowerCase() !== 'routine';
+
+    el.innerHTML = `
+      <div class="cust">${escapeHtml(u.customer || '(no customer)')}</div>
+      <div class="status-pill pill-${cls}">${escapeHtml(u.status || '—')}</div>
+      <div class="addr">${escapeHtml(u.address || '')}</div>
+      ${showAction ? `<div class="action-tag">${escapeHtml(action)}</div>` : ''}
+      <div class="next">${escapeHtml(u.nextService || '')}</div>
+    `;
+    el.addEventListener('click', () => openDetail(u._id));
+    return el;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /* ---------- Detail ---------- */
+  let currentUnit = null;
+
+  function openDetail(id) {
+    const u = units.find(x => x._id === id);
+    if (!u) return;
+    currentUnit = u;
+    const cls = statusKey(u.status);
+    const statusEl = $('#detailStatus');
+    statusEl.textContent = u.status || '—';
+    statusEl.className = `detail-status pill-${cls}`;
+    // Apply color
+    statusEl.style.background = getComputedStyle(document.documentElement)
+      .getPropertyValue(inkVarFor(cls)).trim();
+    statusEl.style.color = '#fff';
+
+    const rows = [
+      ['Customer',        u.customer],
+      ['Contact Name',    u.contactName],
+      ['Contact Number',  u.contactNum],
+      ['Address',         u.address],
+      ['Zone',            u.zone],
+      ['Next Service',    u.nextService],
+      ['Service Action',  u.serviceAction],
+      ['Action Date',     u.actionDate],
+      ['Notes',           u.notes]
+    ];
+    $('#detailFields').innerHTML = rows
+      .filter(([, v]) => v && String(v).trim() !== '')
+      .map(([k, v]) => `
+        <div class="detail-row">
+          <div class="k">${escapeHtml(k)}</div>
+          <div class="v">${escapeHtml(v)}</div>
+        </div>`).join('') || `
+        <div class="detail-row"><div class="k">Info</div><div class="v">No fields provided.</div></div>`;
+
+    // Call button
+    const callBtn = $('#btnCall');
+    if (u.contactNum && u.contactNum.trim()) {
+      callBtn.disabled = false;
+      callBtn.textContent = '📞 Call ' + u.contactNum;
+      callBtn.onclick = () => {
+        window.location.href = 'tel:' + u.contactNum.replace(/[^0-9+]/g, '');
+      };
+    } else {
+      callBtn.disabled = true;
+      callBtn.textContent = 'No number on file';
+      callBtn.onclick = null;
+    }
+
+    // Navigate button
+    $('#btnNavigate').onclick = () => {
+      if (!u.address) { toast('No address on file'); return; }
+      const url = 'https://maps.google.com/?q=' + encodeURIComponent(u.address);
+      window.open(url, '_blank', 'noopener');
+    };
+
+    // Mark Serviced toggle
+    const complBtn = $('#btnComplete');
+    updateCompleteBtn(complBtn, u);
+    complBtn.onclick = () => {
+      toggleServiced(u);
+      updateCompleteBtn(complBtn, u);
+      render();
+    };
+
+    detailSheet.classList.add('open');
+    detailSheet.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDetail() {
+    detailSheet.classList.remove('open');
+    detailSheet.setAttribute('aria-hidden', 'true');
+    currentUnit = null;
+  }
+
+  function updateCompleteBtn(btn, u) {
+    const isDone = !!doneToday[unitKey(u)];
+    btn.classList.toggle('done', isDone);
+    btn.textContent = isDone ? '✓ Serviced' : '✓ Mark Serviced';
+  }
+
+  function toggleServiced(u) {
+    const key = unitKey(u);
+    if (doneToday[key]) {
+      delete doneToday[key];
+    } else {
+      doneToday[key] = {
+        ts: new Date().toISOString(),
+        customer: u.customer,
+        address: u.address,
+        key
+      };
+    }
+    saveDone();
+  }
+
+  function inkVarFor(cls) {
+    switch (cls) {
+      case 'OVERDUE':       return '--overdue-ink';
+      case 'ACTION_NEEDED': return '--action-ink';
+      case 'SERVICE_DUE':   return '--due-ink';
+      case 'COMING_DUE':    return '--coming-ink';
+      case 'PENDING':       return '--pending-ink';
+      case 'SETUP_NEEDED':  return '--setup-ink';
+      default:              return '--navy';
+    }
+  }
+
+  /* ---------- Done Today (sessionStorage) ---------- */
+  function loadDone() {
+    try {
+      const raw = sessionStorage.getItem(SS_DONE_KEY);
+      doneToday = raw ? JSON.parse(raw) : {};
+    } catch { doneToday = {}; }
+  }
+  function saveDone() {
+    sessionStorage.setItem(SS_DONE_KEY, JSON.stringify(doneToday));
+    renderDoneCount();
+    renderDoneList();
+  }
+  function renderDoneCount() {
+    const n = Object.keys(doneToday).length;
+    doneCountEl.textContent = n;
+    doneCountEl.classList.toggle('show', n > 0);
+  }
+  function renderDoneList() {
+    const items = Object.values(doneToday)
+      .sort((a, b) => a.ts.localeCompare(b.ts));
+    if (!items.length) {
+      doneSummaryEl.textContent = 'No units marked serviced yet.';
+      doneListEl.innerHTML = '';
+      return;
+    }
+    const remaining = Math.max(0, units.length - items.length);
+    doneSummaryEl.innerHTML =
+      `<strong>${items.length}</strong> serviced · <strong>${remaining}</strong> remaining on route`;
+    doneListEl.innerHTML = items.map((it, i) => `
+      <div class="done-item">
+        <div class="cust">${i + 1}. ${escapeHtml(it.customer || '(no customer)')}</div>
+        <div class="time">${escapeHtml(timeStr(it.ts))}</div>
+        <div class="addr">${escapeHtml(it.address || '')}</div>
+      </div>
+    `).join('');
+  }
+
+  /* ---------- Copy summary ---------- */
+  async function copySummary() {
+    const items = Object.values(doneToday)
+      .sort((a, b) => a.ts.localeCompare(b.ts));
+    const remaining = Math.max(0, units.length - items.length);
+    const lines = [];
+    lines.push(`Clean Latrine — Serviced ${shortDate()}`);
+    lines.push('----------------------------------------');
+    items.forEach((it, i) => {
+      lines.push(`${i + 1}. ${it.customer || '(no customer)'} — ${it.address || ''} (marked complete at ${timeStr(it.ts)})`);
+    });
+    lines.push('----------------------------------------');
+    lines.push(`Total serviced: ${items.length} units`);
+    lines.push(`Remaining on route: ${remaining} units`);
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Copied!');
+    } catch (e) {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy');
+      ta.remove();
+      toast('Copied!');
+    }
+  }
+
+  /* ---------- Tabs ---------- */
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(b => {
+        b.classList.remove('active'); b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active'); btn.setAttribute('aria-selected', 'true');
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      if (tab === 'route') $('#view-route').classList.add('active');
+      if (tab === 'done')  { $('#view-done').classList.add('active'); renderDoneList(); }
+    });
+  });
+
+  /* ---------- Settings ---------- */
+  function openSettings() {
+    $('#csvUrlInput').value = localStorage.getItem(LS_URL_KEY) || '';
+    $('#currentUrl').textContent = 'Current: ' + getCsvUrl();
+    settingsSheet.classList.add('open');
+    settingsSheet.setAttribute('aria-hidden', 'false');
+  }
+  function closeSettings() {
+    settingsSheet.classList.remove('open');
+    settingsSheet.setAttribute('aria-hidden', 'true');
+  }
+  $('#openSettings').addEventListener('click', openSettings);
+  $('#closeSettings').addEventListener('click', closeSettings);
+  $('#saveUrlBtn').addEventListener('click', () => {
+    const v = $('#csvUrlInput').value.trim();
+    if (!v) { toast('Enter a URL'); return; }
+    setCsvUrl(v);
+    $('#currentUrl').textContent = 'Current: ' + getCsvUrl();
+    toast('Saved');
+    fetchCSV();
+    closeSettings();
+  });
+  $('#resetUrlBtn').addEventListener('click', () => {
+    setCsvUrl(null);
+    $('#csvUrlInput').value = '';
+    $('#currentUrl').textContent = 'Current: ' + getCsvUrl();
+    toast('Reset to default');
+    fetchCSV();
+  });
+
+  /* ---------- Wire up other UI ---------- */
+  $('#closeDetail').addEventListener('click', closeDetail);
+  $('#refreshBtn').addEventListener('click', () => fetchCSV());
+  $('#copySummaryBtn').addEventListener('click', copySummary);
+  $('#clearDoneBtn').addEventListener('click', () => {
+    if (!Object.keys(doneToday).length) return;
+    if (!confirm('Clear the Completed Today list?')) return;
+    doneToday = {}; saveDone(); render();
+    toast('List cleared');
+  });
+
+  /* ---------- Pull-to-refresh (simple) ---------- */
+  (function ptr() {
+    let startY = null, pulling = false;
+    const ptrEl = $('#ptr');
+    const view = document.body;
+    view.addEventListener('touchstart', (e) => {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+        pulling = true;
+      }
+    }, { passive: true });
+    view.addEventListener('touchmove', (e) => {
+      if (!pulling || startY == null) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 0) {
+        ptrEl.classList.toggle('show', dy > 30);
+        ptrEl.textContent = dy > 70 ? 'Release to refresh…' : 'Pull to refresh';
+      }
+    }, { passive: true });
+    view.addEventListener('touchend', (e) => {
+      if (!pulling || startY == null) return;
+      const endY = (e.changedTouches && e.changedTouches[0].clientY) || startY;
+      const dy = endY - startY;
+      ptrEl.classList.remove('show');
+      pulling = false; startY = null;
+      if (dy > 70) fetchCSV();
+    });
+  })();
+
+  /* ---------- Service worker ---------- */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => {
+        console.warn('SW registration failed:', err);
+      });
+    });
+  }
+
+  /* ---------- Init ---------- */
+  loadDone();
+  renderDoneCount();
+  renderDoneList();
+  fetchCSV({ silent: true });
+  </script>
+</body>
+</html>
