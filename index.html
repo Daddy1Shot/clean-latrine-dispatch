@@ -692,7 +692,11 @@
     return d.toLocaleTimeString(undefined,
       { hour: 'numeric', minute: '2-digit' });
   }
+  function refreshDate() {
   $('#todayDate').textContent = todayStr();
+}
+refreshDate();
+setInterval(refreshDate, 60000);
 
   /* ---------- Toast ---------- */
   function toast(msg) {
@@ -761,7 +765,12 @@
     if (!rows.length) { units = []; render(); return; }
     // Drop header row (first row). Every subsequent row that has *any*
     // content is considered actionable (the sheet is pre-filtered).
-    const body = rows.slice(1).filter(r => r[0] && r[0].trim().toUpperCase() === 'SHOW');
+    // Debug: log first 5 rows to console so we can see what column A contains
+rows.slice(0, 5).forEach((r, i) => console.log('Row ' + i + ' col0:', JSON.stringify(r[0])));
+const body = rows.slice(1).filter(r => {
+  const colA = (r[0] || '').trim().toUpperCase();
+  return colA === 'SHOW';
+});
     units = body.map(rowToUnit);
     render();
   }
