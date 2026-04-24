@@ -761,7 +761,7 @@
     if (!rows.length) { units = []; render(); return; }
     // Drop header row (first row). Every subsequent row that has *any*
     // content is considered actionable (the sheet is pre-filtered).
-    const body = rows.slice(1).filter(r => r.some(c => (c || '').trim() !== ''));
+    const body = rows.slice(1).filter(r => r[0] && r[0].trim().toUpperCase() === 'SHOW');
     units = body.map(rowToUnit);
     render();
   }
